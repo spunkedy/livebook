@@ -9,54 +9,7 @@ defmodule Livebook.Application do
     validate_hostname_resolution!()
     set_cookie()
 
-    children =
-      [
-        # Start the Telemetry supervisor
-        LivebookWeb.Telemetry,
-        # Start the PubSub system
-        {Phoenix.PubSub, name: Livebook.PubSub},
-        # Start a supervisor for Livebook tasks
-        {Task.Supervisor, name: Livebook.TaskSupervisor},
-        # Start the storage module
-        Livebook.Storage,
-        # Run migrations as soon as the storage is running
-        Livebook.Migration,
-        # Start the periodic version check
-        Livebook.UpdateCheck,
-        # Periodic measurement of system resources
-        Livebook.SystemResources,
-        # Start the notebook manager server
-        Livebook.NotebookManager,
-        # Start the tracker server on this node
-        {Livebook.Tracker, pubsub_server: Livebook.PubSub},
-        # Start the supervisor dynamically managing apps
-        {DynamicSupervisor, name: Livebook.AppSupervisor, strategy: :one_for_one},
-        # Start the supervisor dynamically managing sessions
-        {DynamicSupervisor, name: Livebook.SessionSupervisor, strategy: :one_for_one},
-        # Start the server responsible for associating files with sessions
-        Livebook.Session.FileGuard,
-        # Start the node pool for managing node names
-        Livebook.Runtime.NodePool,
-        # Start the unique task dependencies
-        Livebook.Utils.UniqueTask,
-        # Start the registry for managing unique connections
-        {Registry, keys: :unique, name: Livebook.HubsRegistry},
-        # Start the supervisor dynamically managing connections
-        {DynamicSupervisor, name: Livebook.HubsSupervisor, strategy: :one_for_one}
-      ] ++
-        if serverless?() do
-          []
-        else
-          {_type, module, key} = Livebook.Config.identity_provider()
-
-          iframe_server_specs() ++
-            [
-              {module, name: LivebookWeb.ZTA, identity_key: key},
-              {DNSCluster, query: Application.get_env(:livebook, :dns_cluster_query) || :ignore},
-              # We skip the access url as we do our own logging below
-              {LivebookWeb.Endpoint, log_access_url: false}
-            ] ++ app_specs()
-        end
+    children = get_children()
 
     opts = [strategy: :one_for_one, name: Livebook.Supervisor]
 
@@ -77,6 +30,57 @@ defmodule Livebook.Application do
       {:error, error} ->
         Livebook.Config.abort!(Application.format_error(error))
     end
+  end
+
+  # break this out to allow for easier test-ability
+  def get_children() do
+    [
+      # Start the Telemetry supervisor
+      LivebookWeb.Telemetry,
+      # Start the PubSub system
+      {Phoenix.PubSub, name: Livebook.PubSub},
+      # Start a supervisor for Livebook tasks
+      {Task.Supervisor, name: Livebook.TaskSupervisor},
+      # Start the storage module
+      Livebook.Storage,
+      # Run migrations as soon as the storage is running
+      Livebook.Migration,
+      # Start the periodic version check
+      Livebook.UpdateCheck,
+      # Periodic measurement of system resources
+      Livebook.SystemResources,
+      # Start the notebook manager server
+      Livebook.NotebookManager,
+      # Start the tracker server on this node
+      {Livebook.Tracker, pubsub_server: Livebook.PubSub},
+      # Start the supervisor dynamically managing apps
+      {DynamicSupervisor, name: Livebook.AppSupervisor, strategy: :one_for_one},
+      # Start the supervisor dynamically managing sessions
+      {DynamicSupervisor, name: Livebook.SessionSupervisor, strategy: :one_for_one},
+      # Start the server responsible for associating files with sessions
+      Livebook.Session.FileGuard,
+      # Start the node pool for managing node names
+      Livebook.Runtime.NodePool,
+      # Start the unique task dependencies
+      Livebook.Utils.UniqueTask,
+      # Start the registry for managing unique connections
+      {Registry, keys: :unique, name: Livebook.HubsRegistry},
+      # Start the supervisor dynamically managing connections
+      {DynamicSupervisor, name: Livebook.HubsSupervisor, strategy: :one_for_one}
+    ] ++
+      if serverless?() do
+        []
+      else
+        {_type, module, key} = Livebook.Config.identity_provider()
+
+        iframe_server_specs() ++
+          [
+            {module, name: LivebookWeb.ZTA, identity_key: key},
+            {DNSCluster, query: Application.get_env(:livebook, :dns_cluster_query) || :ignore},
+            # We skip the access url as we do our own logging below
+            {LivebookWeb.Endpoint, log_access_url: false}
+          ] ++ app_specs()
+      end
   end
 
   # Tell Phoenix to update the endpoint configuration
